@@ -38,6 +38,7 @@ def render(
 
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
     if pc.get_xyz.shape[0] == 0:
+        # print("Warning: no points to render")
         return None
 
     screenspace_points = (
