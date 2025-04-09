@@ -287,6 +287,10 @@ class BackEnd(mp.Process):
                     == self.gaussian_update_offset
                 )
                 if update_gaussian:
+                    print(f"update gaussian: \n densyfy_grad_threshold: {self.opt_params.densify_grad_threshold}")
+                    print(f"gaussian_th: {self.gaussian_th}")
+                    print(f"gaussian_extent: {self.gaussian_extent}")
+                    print(f"size_threshold: {self.size_threshold}")
                     self.gaussians.densify_and_prune(
                         self.opt_params.densify_grad_threshold,
                         self.gaussian_th,
