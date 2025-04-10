@@ -9,8 +9,8 @@ import torch.multiprocessing as mp
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation as R
 
-# from gaussian_splatting.gaussian_renderer import render
-# from gaussian_splatting.utils.loss_utils import l1_loss, ssim
+from gaussian_splatting.gaussian_renderer import render
+from gaussian_splatting.utils.loss_utils import l1_loss, ssim
 from utils.logging_utils import Log
 from utils.multiprocessing_utils import clone_obj
 from utils.pose_utils import update_pose
@@ -46,7 +46,7 @@ dataset = TUMDataset(model_params, path, config=config)
 
 gaussian_model = GaussianModel(sh_degree=0)
 GaussianModel.load_ply(gaussian_model, filepath)
-gaussian_model.init_lr(0.01)
+gaussian_model.init_lr(0.5)
 opt_params = munchify(config["opt_params"])
 gaussian_model.training_setup(opt_params)
 
@@ -134,7 +134,7 @@ def render_camera(keyframe_idx):
     )
 # image, viewspace_point_tensor, visibility_filter, radii, depth, opacity, n_touched, gt_image, gt_image_rearranged = render_camera(7)
 
-def plot_img(images1, images2, gt_images):
+def plot_img(images1, images2, gt_images, num_it, opt_views):
     # img_list = []
 
     num_views = len(images1)
@@ -155,14 +155,14 @@ def plot_img(images1, images2, gt_images):
     for key in images2.keys():
         img = einops.rearrange(images2[key].cpu().detach().numpy(), "c h w -> h w c")
         plt.subplot(num_views, 3, num_views*i+2)
-        plt.title("Render initial View" + str(key))
+        plt.title(f"Render optimized with {num_it} iterations on Views {opt_views} of View" + str(key))
         plt.imshow(img)
         i += 1
     i = 0
     for key in images1.keys():
         img = gt_images[key]
         plt.subplot(num_views, 3, num_views*i+3)
-        plt.title("Render initial View" + str(key))
+        plt.title("GT View" + str(key))
         plt.imshow(img)
         i += 1
 
@@ -188,7 +188,7 @@ def plot_img(images1, images2, gt_images):
     # plt.imshow(gt_image_to_show)
     # plt.show()
 
-def optimize_gaussians(keyframe_window=[0,1,2], iterations=1):
+def optimize_gaussians(keyframe_window=[0,1,2], iterations=1, lambda_dssim = 0.2):
     densify_grad_threshold = 0.0002
     gaussian_th = 0.7
     gaussian_extent = 6.0
@@ -246,15 +246,18 @@ def optimize_gaussians(keyframe_window=[0,1,2], iterations=1):
                 render_pkg["n_touched"],
             )
 
-            loss_mapping += get_loss_mapping_rgb(config, image, None, viewpoint)
+            # loss_mapping += get_loss_mapping_rgb(config, image, None, viewpoint)
+            loss = (1 - lambda_dssim) * l1_loss(image, viewpoint.original_image) + lambda_dssim * (1 - ssim(image, viewpoint.original_image))
+            loss_mapping += loss
+            # loss_mapping = ssim(image, viewpoint.original_image)
             if i == 0:
                 renders_init[cam_idx] = image.clone()
             if i == iterations - 1:
                 renders_end[cam_idx] = image.clone()
         print("loss mapping: ", loss_mapping.item())
         # print("SSIM: ", ssim(image, viewpoint.original_image))
-        if i == 0:
-            first_render = image.clone()
+        # if i == 0:
+        #     first_render = image.clone()
         scaling = gaussian_model.get_scaling
         isotropic_loss = torch.abs(scaling - scaling.mean(dim=1).view(-1, 1))
         loss_mapping += 10 * isotropic_loss.mean()
@@ -265,14 +268,14 @@ def optimize_gaussians(keyframe_window=[0,1,2], iterations=1):
                 iteration_count % gaussian_update_every
                 == gaussian_update_offset
             )
-            if update_gaussian:
-                print("densifying and pruning")
-                gaussian_model.densify_and_prune(
-                    densify_grad_threshold,
-                    gaussian_th,
-                    gaussian_extent,
-                    size_threshold,
-                )
+            # if update_gaussian:
+            #     print("densifying and pruning")
+            #     gaussian_model.densify_and_prune(
+            #         densify_grad_threshold,
+            #         gaussian_th,
+            #         gaussian_extent,
+            #         size_threshold,
+            #     )
             # if update_gaussian:
             #     gaussian_model.densify_and_prune(
             #         opt_params.densify_grad_threshold,
@@ -293,12 +296,10 @@ def optimize_gaussians(keyframe_window=[0,1,2], iterations=1):
             gaussian_model.optimizer.step()
             gaussian_model.optimizer.zero_grad(set_to_none=True)
             gaussian_model.update_learning_rate(iteration_count)
-        if i == iterations - 1:
-            last_render = image.clone()
 
         
     # loss_init.backward()
-    plot_img(renders_init, renders_end, gt_imgs)
+    plot_img(renders_init, renders_end, gt_imgs, iterations, keyframe_window)
     return
 
 
@@ -307,11 +308,11 @@ losses = {
     "l1_loss": [],
 }
 
-optimize_gaussians([0,1], 50)
+optimize_gaussians([0,1,2], 10)
 
-# GaussianModel.save_ply(
-#     gaussian_model, PATH + DATE + "optimized_gaussians/rgbd_dataset_freiburg1_desk_2025-04-07_16-48-53gaussmap_optimized.ply"
-# )
+GaussianModel.save_ply(
+    gaussian_model, PATH + DATE + "optimized_gaussians/rgbd_dataset_freiburg1_desk_2025-04-07_16-48-53gaussmap_optimized.ply"
+)
 
 def eval_renders():
     N = len(timestamps)
