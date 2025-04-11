@@ -140,9 +140,10 @@ class BackEnd(mp.Process):
         return render_pkg
 
     def map(self, current_window, prune=False, iters=1):
+        print(f"Map iters: {iters}")
         if len(current_window) == 0:
             return
-
+        print(f"Current window: {current_window}")
         viewpoint_stack = [self.viewpoints[kf_idx] for kf_idx in current_window]
         random_viewpoint_stack = []
         frames_to_optimize = self.config["Training"]["pose_window"]
@@ -165,6 +166,8 @@ class BackEnd(mp.Process):
             keyframes_opt = []
 
             for cam_idx in range(len(current_window)):
+                # print(f"cam_idx {cam_idx} len(current_window) {len(current_window)}")
+
                 viewpoint = viewpoint_stack[cam_idx]
                 keyframes_opt.append(viewpoint)
                 render_pkg = render(
@@ -195,6 +198,7 @@ class BackEnd(mp.Process):
                 visibility_filter_acm.append(visibility_filter)
                 radii_acm.append(radii)
                 n_touched_acm.append(n_touched)
+
 
             for cam_idx in torch.randperm(len(random_viewpoint_stack))[:2]:
                 viewpoint = random_viewpoint_stack[cam_idx]
@@ -287,10 +291,10 @@ class BackEnd(mp.Process):
                     == self.gaussian_update_offset
                 )
                 if update_gaussian:
-                    print(f"update gaussian: \n densyfy_grad_threshold: {self.opt_params.densify_grad_threshold}")
-                    print(f"gaussian_th: {self.gaussian_th}")
-                    print(f"gaussian_extent: {self.gaussian_extent}")
-                    print(f"size_threshold: {self.size_threshold}")
+                    # print(f"update gaussian: \n densyfy_grad_threshold: {self.opt_params.densify_grad_threshold}")
+                    # print(f"gaussian_th: {self.gaussian_th}")
+                    # print(f"gaussian_extent: {self.gaussian_extent}")
+                    # print(f"size_threshold: {self.size_threshold}")
                     self.gaussians.densify_and_prune(
                         self.opt_params.densify_grad_threshold,
                         self.gaussian_th,
