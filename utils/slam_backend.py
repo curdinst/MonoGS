@@ -234,6 +234,7 @@ class BackEnd(mp.Process):
             loss_mapping += 10 * isotropic_loss.mean()
             loss_mapping.backward()
             gaussian_split = False
+            print(f"gaussians lr: ")
             ## Deinsifying / Pruning Gaussians
             with torch.no_grad():
                 self.occ_aware_visibility = {}
@@ -325,6 +326,7 @@ class BackEnd(mp.Process):
         return gaussian_split
 
     def color_refinement(self):
+        print("Color refinement")
         Log("Starting color refinement")
 
         iteration_total = 26000

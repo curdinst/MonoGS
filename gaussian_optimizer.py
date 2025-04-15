@@ -38,7 +38,7 @@ FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-14_14-01-11_wa.ply"
 
 TEST_NAME = FILENAME[56:-4]
 device = "cuda"
-
+folder_path = None
 filepath = PATH + DATE + FILENAME
 # gaussians = load_ply(filepath)
 
@@ -52,9 +52,9 @@ dataset = TUMDataset(model_params, tum_path, config=config)
 
 gaussian_model = GaussianModel(sh_degree=0)
 GaussianModel.load_ply(gaussian_model, filepath)
-gaussian_model.init_lr(0.01)
-opt_params = munchify(config["opt_params"])
-gaussian_model.training_setup(opt_params)
+
+# opt_params = munchify(config["opt_params"])
+# gaussian_model.training_setup(opt_params)
 
 
 
@@ -88,7 +88,6 @@ elif os.path.exists(txt_file_path_dated):
         #     for line in lines
         # ]
         # print("Extracted numbers:", numbers)
-        
 else:
     print(f"Files not found: {txt_file_path} or {txt_file_path_dated}")
 poses = torch.tensor(numbers, dtype=torch.float32, device=device)
@@ -167,6 +166,7 @@ else:
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+from datetime import datetime
 
 def interpolate_pose(T_i, T_j, alpha):
     """
@@ -221,7 +221,7 @@ for i in range(len(timestamps)):
     gt_imgs.append(plt.imread("/home/curdin/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/rgb/" + str(timestamps[i]) + ".png"))
 gt_frame_imgs = []
 for j in range(len(frame_timestamps)):
-    gt_frame_imgs.append(plt.imread("/home/curdin/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/rgb/" + str(timestamps[i]) + ".png"))
+    gt_frame_imgs.append(plt.imread("/home/curdin/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/rgb/" + str(frame_timestamps[j]) + ".png"))
 print(gt_imgs[0].shape)
 
 
@@ -238,13 +238,16 @@ projection_matrix = getProjectionMatrix2(
 projection_matrix = projection_matrix.to(device=device)
 
 
-def render_camera(keyframe_idx):
+def render_camera(keyframe_idx, is_keyframe = True):
     viewpoint = Camera.init_from_dataset(
                         dataset, idx=keyframe_idx, projection_matrix=projection_matrix
                     )
-
-    viewpoint.T = translations[keyframe_idx]
-    viewpoint.R = rotations[keyframe_idx]
+    if is_keyframe:
+        viewpoint.T = translations[keyframe_idx]
+        viewpoint.R = rotations[keyframe_idx]
+    else:
+        viewpoint.T = frame_translations[keyframe_idx]
+        viewpoint.R = frame_rotations[keyframe_idx]
     pipeline_params = munchify(config["pipeline_params"])
 
     background = torch.tensor([0, 0, 0], dtype=torch.float32, device=device)
@@ -253,11 +256,7 @@ def render_camera(keyframe_idx):
                         viewpoint, gaussian_model, pipeline_params, background
                     )
     # print(render_pkg)
-    (
-        image,
-    ) = (
-        render_pkg["render"],
-    )
+    image = render_pkg["render"]
     gt_image = gt_imgs[keyframe_idx]
     gt_image = torch.from_numpy(gt_image)
     gt_image_rearranged = einops.rearrange(gt_image, "h w c -> c h w").to(device=device)
@@ -276,32 +275,42 @@ def render_camera(keyframe_idx):
     )
 # image, viewspace_point_tensor, visibility_filter, radii, depth, opacity, n_touched, gt_image, gt_image_rearranged = render_camera(7)
 
-def plot_img(images1, images2, gt_images, num_it, keyframe_window, validation_frames, val_renders_init, val_renders_end):
+def plot_img(images1, images2, gt_images, num_it, keyframe_window, validation_frames, val_renders_init, val_renders_end, use_keyframes = True, folder_path=None):
     # img_list = []
     title_txt_size = 10
     num_views = len(keyframe_window) + len(validation_frames)
     num_kw_views = len(keyframe_window)
-    plt.figure()
+    
+    fig = plt.figure(figsize=(20, 20))
     plt.suptitle(f"Render optimized with {num_it} iterations on Views {keyframe_window}")
     plt.axis("off")
+    renders = {}
+    render_titles = {}
+    
     i = 0
     for key in keyframe_window:
         img = einops.rearrange(images1[key].cpu().detach().numpy(), "c h w -> h w c")
         # plt.subplot(num_views, 3, 3*i+1)
         plt.subplot(3, num_views, i+1)
         plt.title(f"Initial View "+str(key)+f"\n SSIM: {images1[str(key)+'SSIM']} \n L1: {images1[str(key)+'L1']}", fontsize=title_txt_size)
+        renders["Init_View_"+str(key)] = img
+        render_titles["Init_View_"+str(key)] = f"Initial View "+str(key)+f"\n SSIM: {images1[str(key)+'SSIM']} \n L1: {images1[str(key)+'L1']}"
         plt.imshow(img)
         plt.axis("off")
         img = einops.rearrange(images2[key].cpu().detach().numpy(), "c h w -> h w c")
         # plt.subplot(num_views, 3, 3*i+2)
         plt.subplot(3, num_views, num_views+i+1)
         plt.title(f"Optimized View "+str(key)+f"\n SSIM: {images2[str(key)+'SSIM']} \n L1: {images2[str(key)+'L1']}", fontsize=title_txt_size)
+        renders["Opt_View_"+str(key)] = img
+        render_titles["Opt_View_"+str(key)] = f"Optimized View "+str(key)+f"\n SSIM: {images2[str(key)+'SSIM']} \n L1: {images2[str(key)+'L1']}"
         plt.imshow(img)
         plt.axis("off")
-        img = gt_images[key]
+        img = gt_images[key] if use_keyframes else gt_frame_imgs[key]
         # plt.subplot(num_views, 3, 3*i+3)
         plt.subplot(3, num_views, num_views*2+i+1)
         plt.title("GT View" + str(key), fontsize=title_txt_size)
+        renders["GT_View_"+str(key)] = img
+        render_titles["GT_View_"+str(key)] = "GT View " + str(key)
         plt.imshow(img)
         plt.axis("off")
         i += 1
@@ -312,44 +321,67 @@ def plot_img(images1, images2, gt_images, num_it, keyframe_window, validation_fr
         # plt.subplot(num_views, 3, 3*i+1)
         plt.subplot(3, num_views, i+1)
         plt.title(f"Initial validation View "+str(key)+f"\n SSIM: {val_renders_init[str(key)+'SSIM']} \n L1: {val_renders_init[str(key)+'L1']}", fontsize=title_txt_size)
+        renders["Init_val_View_"+str(key)] = img
+        render_titles["Init_val_View_"+str(key)] = f"Initial validation View "+str(key)+f"\n SSIM: {val_renders_init[str(key)+'SSIM']} \n L1: {val_renders_init[str(key)+'L1']}"
         plt.imshow(img)
         plt.axis("off")
         img = einops.rearrange(val_renders_end[key].cpu().detach().numpy(), "c h w -> h w c")
         # plt.subplot(num_views, 3, 3*i+2)
         plt.subplot(3, num_views, num_views+i+1)
         plt.title(f"Optimized validation View "+str(key)+f"\n SSIM: {val_renders_end[str(key)+'SSIM']} \n L1: {val_renders_end[str(key)+'L1']}", fontsize=title_txt_size)
+        renders["Opt_val_View_"+str(key)] = img
+        render_titles["Opt_val_View_"+str(key)] = f"Optimized validation View "+str(key)+f"\n SSIM: {val_renders_end[str(key)+'SSIM']} \n L1: {val_renders_end[str(key)+'L1']}"
         plt.imshow(img)
         plt.axis("off")
-        img = gt_images[key]
+        img = gt_images[key] if use_keyframes else gt_frame_imgs[key]
         # plt.subplot(num_views, 3, 3*i+3)
         plt.subplot(3, num_views, num_views*2+i+1)
-        plt.title("GT validation View" + str(key), fontsize=title_txt_size)
+        plt.title("GT_View_" + str(key), fontsize=title_txt_size)
+        renders["GT_View_"+str(key)] = img
+        render_titles["GT_View_"+str(key)] = "GT View " + str(key)
         plt.imshow(img)
         plt.axis("off")
         i += 1
     plt.show()
-    # for key, image in img_dict.items():
+    if folder_path is not None:
+        fig.savefig(os.path.join(folder_path, f"rendered_images.png"))
+        print(f"")
 
+    img_folder = os.path.join(folder_path, "renders")
+    os.mkdir(img_folder)
+    for key, image in renders.items():
+        fig = plt.figure(figsize=(10, 10))
+        plt.imshow(image)
+        plt.title(render_titles[key])
+        plt.axis("off")
+        fig.savefig(os.path.join(img_folder, f"{key}.png"))
 
-    # image1_to_show = einops.rearrange(image1.cpu().detach().numpy(), "c h w -> h w c")
-    # image2_to_show = einops.rearrange(image2.cpu().detach().numpy(), "c h w -> h w c")
-    # gt_image_to_show = einops.rearrange(gt_image.cpu().detach().numpy(), "c h w -> h w c")
+def save_metrics(images1, images2, gt_images, num_it, keyframe_window, validation_frames, val_renders_init, val_renders_end, use_keyframes = True, folder_path=None):
 
-    # plt.subplot(2, num_views+1, )
+    if folder_path is not None:
+        metrics_file_path = os.path.join(folder_path, "metrics.txt")
+        with open(metrics_file_path, "w") as f:
+            f.write(f"Metrics after {num_it} iterations:\n\n")
+            f.write("Keyframe Window Metrics:\n")
+            f.write(f"Frame : metric:  Initial - Optimized\n")
+            for key in keyframe_window:
+                f.write(f"{key} : SSIM: {images1[str(key)+'SSIM']} - {images2[str(key)+'SSIM']}\n")
+                f.write(f"{key} : L1:   {images1[str(key)+'L1']} - {images2[str(key)+'L1']}\n")
+            f.write("Validation Frame Metrics:\n")
+            f.write(f"Frame : metric:  Initial - Optimized\n")
+            for key in validation_frames:
+                f.write(f"{key} : SSIM: {val_renders_init[str(key)+'SSIM']} - {val_renders_end[str(key)+'SSIM']}\n")
+                f.write(f"{key} : L1:   {val_renders_init[str(key)+'L1']} - {val_renders_end[str(key)+'L1']}\n")
+        print(f"Metrics saved to {metrics_file_path}")
+    for key in keyframe_window:
+        images1[str(key)+'SSIM']
+        images1[str(key)+'L1']
+        images2[str(key)+'SSIM']
+        images2[str(key)+'L1']
 
+ 
 
-    # plt.subplot(131)
-    # plt.title("Rendered Image 1")
-    # plt.imshow(image1_to_show)
-    # plt.subplot(132)
-    # plt.title("Rendered Image 2")
-    # plt.imshow(image2_to_show)
-    # plt.subplot(133)
-    # plt.title("GT Image")
-    # plt.imshow(gt_image_to_show)
-    # plt.show()
-
-def optimize_gaussians(keyframe_window=[0,1,2], iterations=1, lambda_dssim = 0.2, validation_frames = []):
+def optimize_gaussians(keyframe_window=[0,1,2], iterations=1, lambda_dssim = 0.2, validation_frames = [], densify_prune=False, use_keyframes = False, folder_path=None):
     print(f"Optimizing gaussians for window {keyframe_window} on {iterations} iterations")
     densify_grad_threshold = 0.0002
     gaussian_th = 0.7
@@ -361,22 +393,33 @@ def optimize_gaussians(keyframe_window=[0,1,2], iterations=1, lambda_dssim = 0.2
     val_renders_init = {}
     val_renders_end = {}
 
-    viewpoint_stack = {}
-    for cam_idx in keyframe_window:
-        viewpoint = Camera.init_from_dataset(
-            dataset, idx=cam_idx, projection_matrix=projection_matrix
-        )
-        viewpoint.T = translations[cam_idx]
-        viewpoint.R = rotations[cam_idx]
-        viewpoint.original_image = torch.from_numpy(einops.rearrange(gt_imgs[cam_idx], "h w c -> c h w")).to(device=device)
-        viewpoint_stack[cam_idx] = viewpoint
+    if use_keyframes:
+        viewpoint_stack = {}
+        for cam_idx in keyframe_window:
+            viewpoint = Camera.init_from_dataset(
+                dataset, idx=cam_idx, projection_matrix=projection_matrix
+            )
+            viewpoint.T = translations[cam_idx]
+            viewpoint.R = rotations[cam_idx]
+            viewpoint.original_image = torch.from_numpy(einops.rearrange(gt_imgs[cam_idx], "h w c -> c h w")).to(device=device)
+            viewpoint_stack[cam_idx] = viewpoint
+    else:
+        frame_viewpoint_stack = {}
+        for cam_idx in range(len(frame_timestamps)):
+            viewpoint = Camera.init_from_dataset(
+                dataset, idx=cam_idx, projection_matrix=projection_matrix
+            )
+            viewpoint.T = frame_translations[cam_idx]
+            viewpoint.R = frame_rotations[cam_idx]
+            viewpoint.original_image = torch.from_numpy(einops.rearrange(gt_frame_imgs[cam_idx], "h w c -> c h w")).to(device=device)
+            frame_viewpoint_stack[cam_idx] = viewpoint
     
 
     for cam_idx in validation_frames:
         if cam_idx in keyframe_window:
             print("image already in keyframe window")
             continue
-        image, gt_image, gt_image_rearranged = render_camera(cam_idx)
+        image, gt_image, gt_image_rearranged = render_camera(cam_idx, use_keyframes)
         ssim_val = ssim(image, gt_image_rearranged)
         l1_loss_val = l1_loss(image, gt_image_rearranged)
         print("Optimized gaussians view", cam_idx)
@@ -405,25 +448,12 @@ def optimize_gaussians(keyframe_window=[0,1,2], iterations=1, lambda_dssim = 0.2
             # viewpoint.original_image = torch.from_numpy(einops.rearrange(gt_imgs[keyframe_idx], "h w c -> c h w")).to(device=device)
 
             background = torch.tensor([0, 0, 0], dtype=torch.float32, device=device)
-            viewpoint = viewpoint_stack[cam_idx]
+            if use_keyframes:
+                viewpoint = viewpoint_stack[cam_idx]
+            else:
+                viewpoint = frame_viewpoint_stack[cam_idx]
             render_pkg = render(viewpoint, gaussian_model, pipeline_params, background)
-            (
-                image,
-                viewspace_point_tensor,
-                visibility_filter,
-                radii,
-                depth,
-                opacity,
-                n_touched,
-            ) = (
-                render_pkg["render"],
-                render_pkg["viewspace_points"],
-                render_pkg["visibility_filter"],
-                render_pkg["radii"],
-                render_pkg["depth"],
-                render_pkg["opacity"],
-                render_pkg["n_touched"],
-            )
+            image = render_pkg["render"]
 
             # loss_mapping += get_loss_mapping_rgb(config, image, None, viewpoint)
             l1_loss_val = l1_loss(image, viewpoint.original_image)
@@ -451,8 +481,8 @@ def optimize_gaussians(keyframe_window=[0,1,2], iterations=1, lambda_dssim = 0.2
             with torch.no_grad():
 
                 update_gaussian = (
-                    iteration_count % gaussian_update_every
-                    == gaussian_update_offset
+                    densify_prune and 
+                    iteration_count % gaussian_update_every == gaussian_update_offset
                 )
                 if update_gaussian:
                     print("densifying and pruning")
@@ -502,7 +532,8 @@ def optimize_gaussians(keyframe_window=[0,1,2], iterations=1, lambda_dssim = 0.2
         
         # val_renders_end[cam_idx] = renders_end[cam_idx].clone()
     # loss_init.backward()
-    plot_img(renders_init, renders_end, gt_imgs, iterations, keyframe_window, validation_frames, val_renders_init, val_renders_end)
+    plot_img(renders_init, renders_end, gt_imgs, iterations, keyframe_window, validation_frames, val_renders_init, val_renders_end, use_keyframes, folder_path=folder_path)
+    save_metrics(renders_init, renders_end, gt_imgs, iterations, keyframe_window, validation_frames, val_renders_init, val_renders_end, use_keyframes, folder_path=folder_path)
     return
 
 def tracking(cur_frame_idx, viewpoint, tracking_itr_num=30):
@@ -604,8 +635,87 @@ def tracking(cur_frame_idx, viewpoint, tracking_itr_num=30):
 
 # print(f"translation 01 {torch.linalg.norm(translations[0] - translations[1])}")
 
-optimize_gaussians(list(range(11)), 30, validation_frames = [])
+# optimize_gaussians(list(range(11)), 30, validation_frames = [])
+# optimize_gaussians([0,10,20,30,40], 20, validation_frames = [], use_keyframes=False)
 
+def run_test(init_lr=0.5, iterations=30, keyframe_window=[0,1,2], validation_frames=[], use_keyframes=False):
+    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    folder_path = os.path.join(PATH, DATE, f"Gauss_opt_{current_time}")
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+        print(f"Folder created at: {folder_path}")
+    else:
+        print(f"Folder already exists at: {folder_path}")
+    densify_prune = False
+
+    opt_params = {
+        "iterations": 30000,
+        "position_lr_init": 0.0016,
+        "position_lr_final": 0.0000016,
+        "position_lr_delay_mult": 0.01,
+        "position_lr_max_steps": 30000,
+        "feature_lr": 0.0025,
+        "opacity_lr": 0.05,
+        "scaling_lr": 0.001,
+        "rotation_lr": 0.001,
+        "percent_dense": 0.01,
+        "lambda_dssim": 0.2,
+        "densification_interval": 100,
+        "opacity_reset_interval": 3000,
+        "densify_from_iter": 500,
+        "densify_until_iter": 15000,
+        "densify_grad_threshold": 0.0002,
+    }
+    # Save all parameters to a text file
+    params_file_path = os.path.join(folder_path, "params.txt")
+    with open(params_file_path, "w") as f:
+        f.write(f"Initial Learning Rate: {init_lr}\n")
+        f.write(f"Iterations: {iterations}\n")
+        f.write(f"Keyframe Window: {keyframe_window}\n")
+        f.write(f"Validation Frames: {validation_frames}\n")
+        f.write(f"Use Keyframes: {use_keyframes}\n")
+        f.write(f"Config Path: {config_path}\n")
+        f.write(f"Dataset Path: {tum_path}\n")
+        f.write(f"Gaussian File Path: {filepath}\n")
+        f.write(f"Densify and Prone: {densify_prune}\n")
+        f.write("Optimization Parameters:\n")
+        f.write(f"  Iterations: {opt_params['iterations']}\n")
+        f.write(f"  Position LR Init: {opt_params['position_lr_init']}\n")
+        f.write(f"  Position LR Final: {opt_params['position_lr_final']}\n")
+        f.write(f"  Position LR Delay Mult: {opt_params['position_lr_delay_mult']}\n")
+        f.write(f"  Position LR Max Steps: {opt_params['position_lr_max_steps']}\n")
+        f.write(f"  Feature LR: {opt_params['feature_lr']}\n")
+        f.write(f"  Opacity LR: {opt_params['opacity_lr']}\n")
+        f.write(f"  Scaling LR: {opt_params['scaling_lr']}\n")
+        f.write(f"  Rotation LR: {opt_params['rotation_lr']}\n")
+        f.write(f"  Percent Dense: {opt_params['percent_dense']}\n")
+        f.write(f"  Lambda DSSIM: {opt_params['lambda_dssim']}\n")
+        f.write(f"  Densification Interval: {opt_params['densification_interval']}\n")
+        f.write(f"  Opacity Reset Interval: {opt_params['opacity_reset_interval']}\n")
+        f.write(f"  Densify From Iter: {opt_params['densify_from_iter']}\n")
+        f.write(f"  Densify Until Iter: {opt_params['densify_until_iter']}\n")
+        f.write(f"  Densify Grad Threshold: {opt_params['densify_grad_threshold']}\n")
+    print(f"Parameters saved to {params_file_path}")
+
+    gaussian_model.init_lr(init_lr)
+
+
+
+    opt_params = munchify(opt_params)
+    gaussian_model.training_setup(opt_params)
+    optimize_gaussians(keyframe_window=keyframe_window, iterations=iterations, validation_frames=validation_frames, densify_prune=False, use_keyframes=use_keyframes, folder_path=folder_path)
+
+    GaussianModel.save_ply(
+        gaussian_model, folder_path + "/" + FILENAME[:-4] + f"_optimized.ply"
+    )
+
+
+
+keyframe_window = list(range(11))
+keyframe_window.remove(5)
+keyframe_window.remove(9)
+validation_window = [5, 9]
+run_test(init_lr=0.05, iterations=40, keyframe_window=keyframe_window, validation_frames=validation_window, use_keyframes=True)
 
 # for i in range(0, 10, 2):
 #     window = [i, i+1]
@@ -617,9 +727,9 @@ optimize_gaussians(list(range(11)), 30, validation_frames = [])
 #     optimize_gaussians(window, 30, validation_frames = [])
 
 
-GaussianModel.save_ply(
-    gaussian_model, PATH + DATE + "optimized_gaussians/" + FILENAME[:-4] + f"_optimized.ply"
-)
+# GaussianModel.save_ply(
+#     gaussian_model, PATH + DATE + "optimized_gaussians/" + FILENAME[:-4] + f"_optimized.ply"
+# )
 
 
 # image, gt_image, gt_image_rearranged = render_camera(0)

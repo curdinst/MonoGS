@@ -279,6 +279,7 @@ class GaussianModel:
                 "name": "rotation",
             },
         ]
+        print(f"Optimizer parameters: {l}")
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(
