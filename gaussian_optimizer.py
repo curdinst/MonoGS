@@ -25,7 +25,7 @@ from gaussian_splatting.scene.gaussian_model import GaussianModel
 
 PATH = "/home/curdin/master_thesis/outputs/"
 # DATE = "25_04_07/"
-DATE = "25_04_14/"
+DATE = "25_04_15/"
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-07_16-48-53gaussmap.ply"
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-07_21-21-46_all_gaussmap.ply"
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-07_17-25-26gaussmap_abol_rot.ply"
@@ -34,7 +34,8 @@ DATE = "25_04_14/"
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-08_17-29-00_abolrotw_gaussmap.ply"
 
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-14_12-13-04gaussmap_save_first_gaussians.ply"
-FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-14_14-01-11_wa.ply"
+# FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-14_14-01-11_wa.ply"
+FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-15_13-06-17_wa.ply"
 
 TEST_NAME = FILENAME[56:-4]
 device = "cuda"
@@ -56,7 +57,7 @@ GaussianModel.load_ply(gaussian_model, filepath)
 # opt_params = munchify(config["opt_params"])
 # gaussian_model.training_setup(opt_params)
 
-
+USE_MASK = True
 
 # Load a text file and extract the numbers
 txt_file_path = PATH + DATE + "rgbd_dataset_freiburg1_desk.txt"
@@ -163,10 +164,29 @@ if os.path.exists(gt_pose_path):
 else:
     print(f"Ground truth file not found: {gt_pose_path}")
 
+mask_path = PATH + DATE + f"masks_{FILENAME[:-4]}/"
+mask_files = [f for f in os.listdir(mask_path) if f.endswith('.pt')]
+masks = {}
+for mask_file in mask_files:
+    mask_path_full = os.path.join(mask_path, mask_file)
+    mask = torch.load(mask_path_full).to(device=device)
+    mask = einops.rearrange(mask, "(h w) ->h w", h=dataset.height, w=dataset.width)
+    masks[int(mask_file[:-3])] = mask
+
+i = 0
+for key in sorted(masks.keys()):
+    print(f"mask key: {key}")
+    masks[i] = masks.pop(key)
+    i += 1
+print(f"Loaded {len(masks)} mask files.")
+# 1/0
+print(masks.keys())
+# print(masks["123.pt"].shape)
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from datetime import datetime
+from torchvision.transforms import functional as F
 
 def interpolate_pose(T_i, T_j, alpha):
     """
@@ -223,7 +243,16 @@ gt_frame_imgs = []
 for j in range(len(frame_timestamps)):
     gt_frame_imgs.append(plt.imread("/home/curdin/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/rgb/" + str(frame_timestamps[j]) + ".png"))
 print(gt_imgs[0].shape)
-
+# Downsample the gt_imgs by a factor of 1.25
+downsample_factor = 1.25
+gt_imgs = [
+    F.resize(torch.from_numpy(img).permute(2, 0, 1), 
+             size=(int(img.shape[0] / downsample_factor), int(img.shape[1] / downsample_factor))
+    ).permute(1, 2, 0).numpy()
+    for img in gt_imgs
+]
+# plt.imshow(gt_imgs[0])
+# plt.show()
 
 projection_matrix = getProjectionMatrix2(
             znear=0.01,
@@ -453,11 +482,13 @@ def optimize_gaussians(keyframe_window=[0,1,2], iterations=1, lambda_dssim = 0.2
             else:
                 viewpoint = frame_viewpoint_stack[cam_idx]
             render_pkg = render(viewpoint, gaussian_model, pipeline_params, background)
-            image = render_pkg["render"]
-
+            image = render_pkg["render"]*masks[cam_idx] if USE_MASK else render_pkg["render"]
+            print(image.shape)
+            print(f"image original shape: {render_pkg['render'].shape}")
             # loss_mapping += get_loss_mapping_rgb(config, image, None, viewpoint)
-            l1_loss_val = l1_loss(image, viewpoint.original_image)
-            ssim_val = ssim(image, viewpoint.original_image)
+            l1_loss_val = l1_loss(image, viewpoint.original_image*masks[cam_idx]) if USE_MASK else l1_loss(image, viewpoint.original_image)
+            ssim_val = ssim(image, viewpoint.original_image*masks[cam_idx]) if USE_MASK else ssim(image, viewpoint.original_image)
+            # ssim_val = ssim(image, viewpoint.original_image)
             loss = (1 - lambda_dssim) * l1_loss_val + lambda_dssim * (1 - ssim_val)
             loss_mapping = l1_loss_val
             # loss_mapping = ssim(image, viewpoint.original_image)
@@ -678,6 +709,7 @@ def run_test(init_lr=0.5, iterations=30, keyframe_window=[0,1,2], validation_fra
         f.write(f"Dataset Path: {tum_path}\n")
         f.write(f"Gaussian File Path: {filepath}\n")
         f.write(f"Densify and Prone: {densify_prune}\n")
+        f.write(f"Use Mask: {USE_MASK}\n")
         f.write("Optimization Parameters:\n")
         f.write(f"  Iterations: {opt_params['iterations']}\n")
         f.write(f"  Position LR Init: {opt_params['position_lr_init']}\n")
