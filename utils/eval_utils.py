@@ -22,7 +22,7 @@ from gaussian_splatting.utils.system_utils import mkdir_p
 from utils.logging_utils import Log
 
 
-def evaluate_evo(poses_gt, poses_est, plot_dir, label, monocular=False):
+def evaluate_evo(poses_gt, poses_est, plot_dir, label, monocular=False, ape_only=False):
     ## Plot
     traj_ref = PosePath3D(poses_se3=poses_gt)
     traj_est = PosePath3D(poses_se3=poses_est)
@@ -38,7 +38,9 @@ def evaluate_evo(poses_gt, poses_est, plot_dir, label, monocular=False):
     ape_stat = ape_metric.get_statistic(metrics.StatisticsType.rmse)
     ape_stats = ape_metric.get_all_statistics()
     Log("RMSE ATE \[m]", ape_stat, tag="Eval")
-
+    print(f"RMSE ATE \[m]: {ape_stats}")
+    if ape_only:
+        return ape_stats
     with open(
         os.path.join(plot_dir, "stats_{}.json".format(str(label))),
         "w",

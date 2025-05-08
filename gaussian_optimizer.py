@@ -37,10 +37,14 @@ DATE = "25_04_15/"
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-14_14-01-11_wa.ply"
 FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-15_13-06-17_wa.ply"
 
+
 TEST_NAME = FILENAME[56:-4]
 device = "cuda"
 folder_path = None
-filepath = PATH + DATE + FILENAME
+filepath = PATH + "" + "gaussians1.ply"
+filepath = "/home/curdin/Downloads/gaussians.ply"
+# filepath = PATH + DATE + FILENAME
+
 # gaussians = load_ply(filepath)
 
 tum_path = "/home/curdin/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/"
@@ -54,6 +58,53 @@ dataset = TUMDataset(model_params, tum_path, config=config)
 gaussian_model = GaussianModel(sh_degree=0)
 GaussianModel.load_ply(gaussian_model, filepath)
 
+def print_gaussians():
+        print(f" GAussian model ==================================================0")
+        print(f"activ: {gaussian_model.active_sh_degree }")
+        print(f"max_s: {gaussian_model.max_sh_degree}")
+        print(f"_xyz : {gaussian_model._xyz}")
+        print(f"_feat: {gaussian_model._features_dc}")
+        print(f"_feat: {gaussian_model._features_rest}")
+        print(f"_scal: {gaussian_model._scaling}")
+        print(f"_rota: {gaussian_model._rotation}")
+        print(f"_opac: {gaussian_model._opacity}")
+        print(f"max_r: {gaussian_model.max_radii2D }")
+        print(f"xyz_g: {gaussian_model.xyz_gradient_accum}")
+        print(f"uniqu: {gaussian_model.unique_kfIDs }")
+        print(f"n_obs: {gaussian_model.n_obs}")
+        print(f"optim: {gaussian_model.optimizer}")
+        print(f"scali: {gaussian_model.scaling_activation}")
+        print(f"scali: {gaussian_model.scaling_inverse_activation}")
+        print(f"covar: {gaussian_model.covariance_activation}")
+        print(f"opaci: {gaussian_model.opacity_activation}")
+        print(f"inver: {gaussian_model.inverse_opacity_activation}")
+        print(f"rotat: {gaussian_model.rotation_activation}")
+        print(f"confi: {gaussian_model.config}")
+        print(f"ply_i: {gaussian_model.ply_input}")
+        print(f"isotr: {gaussian_model.isotropic}")
+        print(f" shapes   ++++++++++++++++++ shapes ++++++++++++++++++++ shapes")
+        print(f"_xyz : {gaussian_model._xyz.shape}")
+        print(f"_feat: {gaussian_model._features_dc.shape}")
+        print(f"_feat: {gaussian_model._features_rest.shape}")
+        print(f"_scal: {gaussian_model._scaling.shape}")
+        print(f"_rota: {gaussian_model._rotation.shape}")
+        print(f"_opac: {gaussian_model._opacity.shape}")
+        print(f"max_r: {gaussian_model.max_radii2D .shape}")
+        print(f"xyz_g: {gaussian_model.xyz_gradient_accum.shape}")
+        print(f"uniqu: {gaussian_model.unique_kfIDs .shape}")
+        print(f"n_obs: {gaussian_model.n_obs.shape}")
+        print(f" -------------------------------------------------------------")
+
+print_gaussians()
+# exit()
+# print(f"xyz: {gaussian_model._xyz.shape}")
+# print(f"feature dc: {gaussian_model._features_dc.shape}")
+# print(f"feature rest: {gaussian_model._features_rest.shape}")
+# print(f"opacity: {gaussian_model._opacity.shape}")
+# print(f"scaling: {gaussian_model._scaling.shape}")
+# print(f"rotation: {gaussian_model._rotation.shape}")
+# print(f"")
+# gaussian_model._xyz = gaussian_model._xyz[0:1000]
 # opt_params = munchify(config["opt_params"])
 # gaussian_model.training_setup(opt_params)
 
@@ -747,7 +798,10 @@ keyframe_window = list(range(11))
 keyframe_window.remove(5)
 keyframe_window.remove(9)
 validation_window = [5, 9]
-run_test(init_lr=0.05, iterations=40, keyframe_window=keyframe_window, validation_frames=validation_window, use_keyframes=True)
+# run_test(init_lr=0.05, iterations=40, keyframe_window=keyframe_window, validation_frames=validation_window, use_keyframes=True)
+
+# img = render_camera(0)
+# print(f"img shape: {img[0].shape}")
 
 # for i in range(0, 10, 2):
 #     window = [i, i+1]
@@ -777,6 +831,7 @@ def eval_renders():
     }
     test_name = "first_gaussians_mask"
     N = len(timestamps)
+    N = 2
     plt.figure(figsize=(20, 20)) 
     for idx in range(N):
         print("Rendering image", idx)
@@ -798,6 +853,7 @@ def eval_renders():
         plt.title(f"GT Image {idx}")
         plt.axis("off")
     
+    plt.show()
     plt.savefig(os.path.join(PATH, DATE, f"{test_name}.png"))
 
     losses["ssim_mean"] = sum(losses["ssim"]) / len(losses["ssim"])
@@ -816,3 +872,39 @@ def eval_renders():
     # print(f"l1_loss: {l1_loss(image, gt_image_rearranged)} ")
 
 # eval_renders()
+
+viewpoint = Camera.init_from_dataset(
+                        dataset, idx=0, projection_matrix=projection_matrix
+                    )
+
+viewpoint.T = torch.zeros(3, dtype=torch.float32, device=device)
+viewpoint.R = torch.eye(3, dtype=torch.float32, device=device)
+pipeline_params = munchify(config["pipeline_params"])
+
+background = torch.tensor([0, 0, 0], dtype=torch.float32, device=device)
+
+render_pkg = render(
+                    viewpoint, gaussian_model, pipeline_params, background
+                )
+# print(render_pkg)
+# image = render_pkg["render"]
+# import cv2
+# gt_img = cv2.imread("/home/curdin/1305031452.791720.png")
+# gt_img = cv2.cvtColor(gt_img, cv2.COLOR_BGR2RGB)
+# gt_img = cv2.resize(gt_img, (512, 384), interpolation=cv2.INTER_AREA)
+# gt_image = torch.from_numpy(gt_img)
+# print(gt_image.shape)
+# gt_image_rearranged = einops.rearrange(gt_image, "h w c -> c h w").type(torch.float32).to(device=device)/255.0
+# print(f"image shape: {image.shape}")
+# ssim_val = ssim(image, gt_image_rearranged)
+# print("SSIM: ", ssim_val.item())
+# l1_loss_val = l1_loss(image, gt_image_rearranged)
+# print("L1 Loss: ", l1_loss_val.item())
+
+# plt.subplot(1, 2, 1)
+# plt.title(f"Splatt3r ply: SSIM: {round(ssim_val.item(), 3)} L1: {round(l1_loss_val.item(), 3)}")
+# plt.imshow(einops.rearrange(image.detach().cpu().numpy(), "c h w -> h w c"))
+# plt.subplot(1, 2, 2)
+# plt.title("GT Image")
+# plt.imshow(gt_image.detach().cpu().numpy())
+# plt.show()
