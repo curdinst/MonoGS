@@ -38,6 +38,7 @@ from evo.tools.settings import SETTINGS
 from utils.eval_utils import evaluate_evo
 import tkinter as tk
 from tkinter import filedialog
+import pickle
 
 PATH = "/home/curdin/master_thesis/outputs/"
 # DATE = "25_04_07/"
@@ -58,8 +59,11 @@ gaussians_filepath = PATH + DATE + FOLDERNAME + GAUSSIANS_FILENAME
 FOLDERPATH = PATH + DATE + FOLDERNAME
 
 dataset_path = "/home/curdin/repos/MonoGS/datasets/replica/"
-dataset_name = "office_2/"
+# dataset_name = "office_2/"
+dataset_name = "room_0/"
 config_path = os.path.join("/home/curdin/repos/MonoGS/configs/rgbd/replica/office2.yaml")
+# config_path = os.path.join("/home/curdin/repos/MonoGS/configs/rgbd/replica/room0.yaml")
+
 with open(config_path, "r") as yml:
     config = yaml.safe_load(yml)
 config = load_config(config_path)
@@ -67,9 +71,17 @@ model_params = munchify(config["model_params"])
 dataset = ReplicaDataset(args=model_params, config=config, path=dataset_path + dataset_name)
 gt_poses = dataset.poses
 # filepath = PATH + DATE + FILENAME
+def select_folder(initial_dir = PATH):
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+    folder_path = filedialog.askdirectory(initialdir=initial_dir, title="Select a Folder")
+    if folder_path:
+        print(f"Selected folder: {folder_path}")
+    else:
+        print("No folder selected.")
+    return folder_path
 
-
-def eval_trajectory(folder):
+def eval_trajectory(folder, optimized_poses=False):
     txt_file_path = os.path.join(folder, "keyframe_poses.txt")
     if os.path.exists(txt_file_path):
         with open(txt_file_path, "r") as file:
@@ -91,6 +103,24 @@ def eval_trajectory(folder):
         frame_pose[:3, 3] = number[1:4]
         frame_poses.append(frame_pose)
 
+    optimized_poses_filepath = os.path.join(folder, "optimized_poses.pkl")
+    if os.path.exists(optimized_poses_filepath):
+        with open(optimized_poses_filepath, "rb") as file:
+            optimized_poses = pickle.load(file)
+    else:
+        print(f"File not found: {optimized_poses_filepath}")
+        return    
+    print(optimized_poses)
+    # poses_cw_opt = [np.eye(4).astype(np.float32)]
+    poses_cw_opt = []
+    for (key, opt_pose) in optimized_poses.items():
+        print(key)
+        T_cw_opt = torch.linalg.inv(opt_pose).cpu().numpy()
+        print(T_cw_opt)
+        poses_cw_opt.append(T_cw_opt)
+        print(len(poses_cw_opt))
+    print(poses_cw_opt)
+
     def calculate_ate(estimated_poses, ground_truth_poses):
         errors = []
         for est_pose, gt_pose in zip(estimated_poses, ground_truth_poses):
@@ -102,7 +132,10 @@ def eval_trajectory(folder):
             errors.append(error)
         ate = np.mean(errors)
         return ate
+    # print(frame_poses)
 
+    print("Estimated Poses: ---------------------------------------------")
+    print(poses_cw_opt)
     def umeyama(X, Y):
         """
         Estimates the Sim(3) transformation between `X` and `Y` point sets.
@@ -142,12 +175,23 @@ def eval_trajectory(folder):
     
     ape_stats = evaluate_evo(keyframe_gt_poses, frame_poses, "/home/curdin/master_thesis/outputs/", label="test", monocular=True, ape_only=True)
 
+    print("Optimized Poses: ---------------------------------------------")
+
+    print(len(poses_cw_opt))
+    print(len(keyframe_gt_poses))
+    opt_ape_stats = evaluate_evo(keyframe_gt_poses, poses_cw_opt, "/home/curdin/master_thesis/outputs/", label="test", monocular=True, ape_only=True)
+
     frame_poses = np.array(frame_poses)
     keyframe_positions = frame_poses[:, :3, 3]
     keyframe_gt_poses = np.array(keyframe_gt_poses)
     gt_keyframe_positions = keyframe_gt_poses[:, :3, 3]
 
-folder = os.path.join(PATH, DATE, FOLDERNAME)
+DATE = "25_05_09_opt_pose/"
+
+folder = select_folder(initial_dir=PATH+DATE)
+eval_trajectory(folder)
+
+exit()
 
 # for folder in folders:
 #     print("Evaluating folder:", folder)
@@ -199,15 +243,7 @@ def render_camera(gaussians, folder_path, T, R):
 # front = global_rotmat @ front.reshape(3, 1)
 # print(front)
 # view_R = torch.from_numpy(global_rotmat).to(device=device)
-def select_folder():
-    root = tk.Tk()
-    root.withdraw()  # Hide the main window
-    folder_path = filedialog.askdirectory(initialdir=PATH, title="Select a Folder")
-    if folder_path:
-        print(f"Selected folder: {folder_path}")
-    else:
-        print("No folder selected.")
-    return folder_path
+
 
 # folder_path = select_folder()
 FOLDERNAME = "2025-05-08_14-11_replica_room0_30_it_window11"
