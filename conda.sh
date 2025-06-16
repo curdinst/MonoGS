@@ -1,4 +1,4 @@
 conda deactivate
 conda deactivate
 conda activate
-conda activate MonoGS1
+conda activate MonoGS3

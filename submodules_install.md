@@ -56,3 +56,33 @@ pip install imgviz
 pip install OpenGL
 pip install pyOpenGL
 pip install glm
+pip install pyyaml
+pip install glm==0.1.0
+
+# GLIBC_2.33
+conda install vikky34v::glibc 
+
+# On ASL Server:
+conda create -n MonoGS2 python=3.7.13
+conda install main::gxx_linux-64 
+conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.6 -c pytorch -c conda-forge
+pip install submodules/simple-knn/
+pip install submodules/diff-gaussian-rasterization/
+
+pip install matplotlib
+pip install rich
+pip install trimesh
+pip install munch
+pip install open3d
+pip install plyfile
+pip install opencv-python
+pip install jaxtyping
+pip install wandb
+pip install glfw
+pip install imgviz
+pip install OpenGL
+pip install pyOpenGL
+pip install glm
+pip install pyyaml
+pip install glm==0.1.0
+pip install evo

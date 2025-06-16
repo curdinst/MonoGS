@@ -1,9 +1,23 @@
+import PIL.Image
 import torch
 from torch import nn
+import PIL
+import numpy as np
+import cv2
 
 from gaussian_splatting.utils.graphics_utils import getProjectionMatrix2, getWorld2View2
 from utils.slam_utils import image_gradient, image_gradient_mask
 
+
+# def _resize_pil_image(img, long_edge_size):
+#     img = PIL.Image.f
+#     S = 1200
+#     if S > long_edge_size:
+#         interp = PIL.Image.LANCZOS
+#     elif S <= long_edge_size:
+#         interp = PIL.Image.BICUBIC
+#     new_size = (512,384)
+#     return img.resize(new_size, interp)
 
 class Camera(nn.Module):
     def __init__(
@@ -62,12 +76,19 @@ class Camera(nn.Module):
 
         self.projection_matrix = projection_matrix.to(device=device)
 
+
+
     @staticmethod
     def init_from_dataset(dataset, idx, projection_matrix):
+
         gt_color, gt_depth, gt_pose = dataset[idx]
+        
+        resized_image = torch.nn.functional.interpolate(
+            gt_color.unsqueeze(0), size=(384, 512), mode="bilinear", align_corners=False
+        ).squeeze(0)
         return Camera(
             idx,
-            gt_color,
+            resized_image,
             gt_depth,
             gt_pose,
             projection_matrix,

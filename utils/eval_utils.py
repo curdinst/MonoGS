@@ -23,6 +23,7 @@ from utils.logging_utils import Log
 
 
 def evaluate_evo(poses_gt, poses_est, plot_dir, label, monocular=False):
+    print(f"evaluating trajectory for {len(poses_est)} est poses and {len(poses_gt)} gt poses (monocular: {monocular})")
     ## Plot
     traj_ref = PosePath3D(poses_se3=poses_gt)
     traj_est = PosePath3D(poses_se3=poses_est)
@@ -136,6 +137,10 @@ def eval_rendering(
         saved_frame_idx.append(idx)
         frame = frames[idx]
         gt_image, _, _ = dataset[idx]
+        
+        gt_image = torch.nn.functional.interpolate(
+            gt_image.unsqueeze(0), size=(384, 512), mode="bilinear", align_corners=False
+        ).squeeze(0)
 
         rendering = render(frame, gaussians, pipe, background)["render"]
         image = torch.clamp(rendering, 0.0, 1.0)

@@ -19,9 +19,10 @@ except Exception:
 class ReplicaParser:
     def __init__(self, input_folder):
         self.input_folder = input_folder
-        self.color_paths = sorted(glob.glob(f"{self.input_folder}/results/frame*.jpg"))
-        self.depth_paths = sorted(glob.glob(f"{self.input_folder}/results/depth*.png"))
+        self.color_paths = sorted(glob.glob(f"{self.input_folder}/results/frame*.jpg"))[:900]
+        self.depth_paths = sorted(glob.glob(f"{self.input_folder}/results/depth*.png"))[:900]
         self.n_img = len(self.color_paths)
+        print(f"Found {self.n_img} images in {self.input_folder}")
         self.load_poses(f"{self.input_folder}/traj.txt")
 
     def load_poses(self, path):

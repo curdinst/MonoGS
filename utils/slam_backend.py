@@ -140,10 +140,10 @@ class BackEnd(mp.Process):
         return render_pkg
 
     def map(self, current_window, prune=False, iters=1):
-        print(f"Map iters: {iters}")
+        # print(f"Map iters: {iters}")
         if len(current_window) == 0:
             return
-        print(f"Current window: {current_window}")
+        # print(f"Current window: {current_window}")
         viewpoint_stack = [self.viewpoints[kf_idx] for kf_idx in current_window]
         random_viewpoint_stack = []
         frames_to_optimize = self.config["Training"]["pose_window"]
@@ -234,7 +234,7 @@ class BackEnd(mp.Process):
             loss_mapping += 10 * isotropic_loss.mean()
             loss_mapping.backward()
             gaussian_split = False
-            print(f"gaussians lr: ")
+            # print(f"gaussians lr: ")
             ## Deinsifying / Pruning Gaussians
             with torch.no_grad():
                 self.occ_aware_visibility = {}
@@ -441,7 +441,7 @@ class BackEnd(mp.Process):
                         else:
                             iter_per_kf = self.mapping_itr_num
                     for cam_idx in range(len(self.current_window)):
-                        print(f"len(current_winodw): {len(self.current_window)}")
+                        # print(f"len(current_winodw): {len(self.current_window)}")
                         if self.current_window[cam_idx] == 0:
                             continue
                         viewpoint = self.viewpoints[current_window[cam_idx]]

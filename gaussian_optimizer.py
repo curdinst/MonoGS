@@ -23,9 +23,10 @@ from gaussian_splatting.utils.graphics_utils import getProjectionMatrix2, getWor
 from munch import munchify
 from gaussian_splatting.scene.gaussian_model import GaussianModel
 
-PATH = "/home/curdin/master_thesis/outputs/"
+PATH = "/home/curdinst/repos/MASt3R-SLAM/"
 # DATE = "25_04_07/"
 DATE = "25_04_15/"
+DATE = "logs/"
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-07_16-48-53gaussmap.ply"
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-07_21-21-46_all_gaussmap.ply"
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-07_17-25-26gaussmap_abol_rot.ply"
@@ -35,7 +36,8 @@ DATE = "25_04_15/"
 
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-14_12-13-04gaussmap_save_first_gaussians.ply"
 # FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-14_14-01-11_wa.ply"
-FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-15_13-06-17_wa.ply"
+# FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-15_13-06-17_wa.ply"
+FILENAME = "rgbd_dataset_freiburg1_desk_2025-04-16_21-05-25_wa.ply"
 
 TEST_NAME = FILENAME[56:-4]
 device = "cuda"
@@ -43,8 +45,8 @@ folder_path = None
 filepath = PATH + DATE + FILENAME
 # gaussians = load_ply(filepath)
 
-tum_path = "/home/curdin/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/"
-config_path = os.path.join("/home/curdin/repos/MonoGS/configs/mono/tum/fr1_desk.yaml")
+tum_path = "/home/curdinst/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/"
+config_path = os.path.join("/home/curdinst/repos/MonoGS/configs/mono/tum/fr1_desk.yaml")
 with open(config_path, "r") as yml:
     config = yaml.safe_load(yml)
 config = load_config(config_path)
@@ -238,10 +240,10 @@ def interpolate_pose(T_i, T_j, alpha):
 
 gt_imgs = []
 for i in range(len(timestamps)):
-    gt_imgs.append(plt.imread("/home/curdin/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/rgb/" + str(timestamps[i]) + ".png"))
+    gt_imgs.append(plt.imread("/home/curdinst/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/rgb/" + str(timestamps[i]) + ".png"))
 gt_frame_imgs = []
 for j in range(len(frame_timestamps)):
-    gt_frame_imgs.append(plt.imread("/home/curdin/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/rgb/" + str(frame_timestamps[j]) + ".png"))
+    gt_frame_imgs.append(plt.imread("/home/curdinst/repos/MonoGS/datasets/tum/rgbd_dataset_freiburg1_desk/rgb/" + str(frame_timestamps[j]) + ".png"))
 print(gt_imgs[0].shape)
 # Downsample the gt_imgs by a factor of 1.25
 downsample_factor = 1.25
@@ -483,6 +485,7 @@ def optimize_gaussians(keyframe_window=[0,1,2], iterations=1, lambda_dssim = 0.2
                 viewpoint = frame_viewpoint_stack[cam_idx]
             render_pkg = render(viewpoint, gaussian_model, pipeline_params, background)
             image = render_pkg["render"]*masks[cam_idx] if USE_MASK else render_pkg["render"]
+
             print(image.shape)
             print(f"image original shape: {render_pkg['render'].shape}")
             # loss_mapping += get_loss_mapping_rgb(config, image, None, viewpoint)
@@ -747,8 +750,26 @@ keyframe_window = list(range(11))
 keyframe_window.remove(5)
 keyframe_window.remove(9)
 validation_window = [5, 9]
-run_test(init_lr=0.05, iterations=40, keyframe_window=keyframe_window, validation_frames=validation_window, use_keyframes=True)
+# run_test(init_lr=0.05, iterations=40, keyframe_window=keyframe_window, validation_frames=validation_window, use_keyframes=True)
 
+# torch.cuda.set_per_process_memory_fraction(0.1, device="cuda:0")
+
+buffer = 4500
+h,w = 512, 384
+X = torch.zeros(buffer, h * w, 3, device="cuda:0")
+print("saved memory")
+time.sleep(2)
+# with torch.no_grad():
+print(f"num_gaussians: {gaussian_model._xyz.shape}")
+print(f"sh shape {gaussian_model._features_rest.shape}")
+print(f"f rest {gaussian_model._features_rest}")
+print(f"f shape {gaussian_model._features_dc.shape}")
+print(f"rotation shape {gaussian_model._rotation.shape}")
+print(f"opacity shape {gaussian_model._opacity.shape}")
+
+result = render_camera(0)
+
+print(f"img shape {result[0].shape}")
 # for i in range(0, 10, 2):
 #     window = [i, i+1]
 #     random_idx = random.randint(0, 11)

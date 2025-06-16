@@ -1,4 +1,4 @@
-name: MonoGS1
+name: MonoGS3
 channels:
   - pytorch
   - conda-forge
